@@ -1,0 +1,156 @@
+--define the RemoteEvents we created earlier
+local StartEvent = game.ReplicatedStorage:WaitForChild("StartEvent")
+local EndEvent = game.ReplicatedStorage:WaitForChild("EndEvent")
+
+--define the services we need
+local Players = game:GetService("Players")
+local RS = game:GetService("RunService")
+
+--WE ARE DOING OUR CODING HERE
+
+
+
+--keep track of if the game is running
+local started = false
+
+--keep track of which players are in the game, and which are still on the log
+local survivors = {}
+
+--makes a grid of ice blocks
+function makeBlocks()
+	--start at the corner of the area
+	local startX = Area.Position.X - Area.Size.X/2
+	local startZ = Area.Position.Z - Area.Size.Z/2
+	
+	--set how big the blocks are (can be adjusted!)
+	local blockSize = 4
+	
+	--go through the X positions in the Area, increasing by block size
+	for x = startX, startX + Area.Size.X, blockSize do
+		--go through the Z positions for each X position
+		for z = startZ, startZ + Area.Size.Z, blockSize do
+			--create a block at that X and Z
+			local block = Instance.new("Part")
+			block.Position = Vector3.new(x, Area.Position.Y, z)
+			block.Size = Vector3.new(blockSize, blockSize, blockSize)
+			block.Material = "Ice"
+			block.BrickColor = BrickColor.new("Light blue")
+			block.Anchored = true
+			block.Name = "IceBlock"
+			block.Parent = WarmShoes
+			
+			--connect a function to each block
+			block.Touched:Connect(function (part)
+				local char = part.Parent
+				if char then
+					local hum = char:FindFirstChild("Humanoid")
+					
+					--if the block is touched by a Character, color and unanchor it
+					if hum then
+						block.BrickColor = BrickColor.new("Salmon")
+						--wait half a second before unanchoring
+						--NOTE: The lower this value, the harder the game will be
+						wait(0.5)
+						block.Anchored = false
+						wait(1)
+						block:Destroy()
+					end
+				end
+			end)
+		end
+	end
+	
+end
+
+--starts the game
+function startGame()
+	--set the survivors table to all players in the game
+	survivors = Players:GetPlayers()
+	
+	--fire the StartEvent
+	StartEvent:FireAllClients()
+	
+	--go through all the players
+	for i, player in Players:GetPlayers() do
+		local hum = player.Character.HumanoidRootPart
+		
+		--spread the players out 20 studs above the ice blocks
+		hum.Position = Area.Position + Vector3.new(4 * i, 20, 0)
+		
+		--anchor them during the countdown
+		hum.Anchored = true
+	end
+	
+	--make the blocks while the players are floating
+	makeBlocks()
+	wait (3)
+	
+	--unanchor all the players
+	for i, player in survivors do
+		player.Character.HumanoidRootPart.Anchored = false
+	end
+	started = true
+end
+
+--start the game when the start button is triggered
+ProximityPrompt.Triggered:Connect(startGame)
+
+--TESTING BREAK
+--Test the start of your game!(It won't have an end yet)
+
+--fires the end event when the game is over and adds sparkles to the winner
+local function endGame(Player)
+	started = false
+	
+	--fire the EndEvent for every player, with the winner as an argument
+	EndEvent:FireAllClients(Player)
+	
+	--check if there actually is a winner
+	if Player then
+		--add sparkles to the winner
+		local sparkles = Instance.new("Sparkles")
+		sparkles.Parent = Player.Character.HumanoidRootPart
+		wait(5)
+		
+		--remove the sparkles
+		sparkles:Destroy()
+	end
+	for i, part in WarmShoes:GetDescendants() do
+		if part.Name == "IceBlock" then
+			part:Destroy()
+		end
+	end
+end
+
+--eliminates a player based on their number in the table
+function eliminatePlayer(playerNum)
+
+	--remove that player from the survivors table
+	table.remove(survivors, playerNum)
+
+	--check if there is only 1 survivor in the game (that player wins)
+	if #survivors == 1 then
+		endGame(survivors[1])
+
+		--check if there are 0 survivors in the game (no player wins)
+	elseif #survivors < 1 then
+		endGame(nil)
+	end
+end
+
+--checks if a player needs to be eliminated
+function checkSurvivors()
+	if started then
+		--go through all the players, checking if they fell off the log
+		for i, player in survivors do
+			--check if their Y position is too low
+			if player.Character.HumanoidRootPart.Position.Y < 5 then
+				eliminatePlayer(i)
+			end
+		end
+	end
+end
+
+--check for survivors every tick
+RS.Heartbeat:Connect(checkSurvivors)
+
